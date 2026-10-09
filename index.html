@@ -5,25 +5,133 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Welcome</title>
 <style>
-  html, body { margin: 0; height: 100%; background: #000; }
+  html, body { margin: 0; height: 100%; background: #000; font-family: system-ui, sans-serif; }
+  #stage { position: fixed; inset: 0; }
   #enter {
-    position: fixed; inset: 0; width: 100%; height: 100%;
+    width: 100%; height: 100%;
     border: 0; background: #000; color: #fff; cursor: pointer;
     font: 600 1.5rem system-ui, sans-serif; letter-spacing: 0.05em;
   }
-  iframe { position: fixed; inset: 0; width: 100%; height: 100%; border: 0; }
+  #stage iframe { width: 100%; height: 100%; border: 0; display: block; }
+
+  #ticket-link {
+    position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%);
+    z-index: 10; padding: 6px 14px; border: 0; border-radius: 999px;
+    background: rgba(0, 0, 0, 0.6); color: #bbb; cursor: pointer;
+    font: 0.85rem system-ui, sans-serif;
+  }
+  #ticket-link:hover { color: #fff; }
+
+  #overlay {
+    position: fixed; inset: 0; z-index: 20; display: none;
+    align-items: center; justify-content: center; padding: 16px;
+    background: rgba(0, 0, 0, 0.7);
+  }
+  #overlay.open { display: flex; }
+  #ticket {
+    width: 100%; max-width: 420px; box-sizing: border-box; padding: 20px;
+    border-radius: 10px; background: #1b1b1f; color: #eee;
+  }
+  #ticket h2 { margin: 0 0 14px; font-size: 1.15rem; }
+  #ticket label { display: block; margin: 10px 0 4px; font-size: 0.85rem; color: #aaa; }
+  #ticket input, #ticket textarea {
+    width: 100%; box-sizing: border-box; padding: 8px 10px;
+    border: 1px solid #3a3a42; border-radius: 6px;
+    background: #111114; color: #eee; font: 1rem system-ui, sans-serif;
+  }
+  #ticket textarea { min-height: 110px; resize: vertical; }
+  #ticket .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+  #ticket button {
+    padding: 8px 16px; border: 0; border-radius: 6px; cursor: pointer;
+    font: 600 0.95rem system-ui, sans-serif;
+  }
+  #cancel { background: #33333a; color: #ddd; }
+  #send { background: #4f7cff; color: #fff; }
+  #send:disabled { opacity: 0.5; cursor: default; }
+  #status { min-height: 1.2em; margin: 12px 0 0; font-size: 0.9rem; color: #9fd69f; }
+  #status.error { color: #ff8f8f; }
 </style>
 </head>
 <body>
-<button id="enter">Click to enter</button>
+<div id="stage"><button id="enter">Click to enter</button></div>
+
+<button id="ticket-link" type="button">Submit a ticket</button>
+
+<div id="overlay">
+  <form id="ticket">
+    <h2>Submit a ticket</h2>
+    <label for="name">Your name</label>
+    <input id="name" maxlength="50" required autocomplete="off">
+    <label for="issue">Describe the problem</label>
+    <textarea id="issue" maxlength="1500" required></textarea>
+    <p id="status"></p>
+    <div class="row">
+      <button id="cancel" type="button">Close</button>
+      <button id="send" type="submit">Send</button>
+    </div>
+  </form>
+</div>
+
 <script>
+  var WEBHOOK = 'https://discord.com/api/webhooks/1558218894475268197/9aQ3ZIxSP2sxf2IkusBany6rn0zRx6PXhGpeYMOf9ZDZajpQUxq80wVCvO8-fEJ0LcQM';
+
   document.getElementById('enter').addEventListener('click', function () {
     var f = document.createElement('iframe');
     f.src = 'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?autoplay=1&loop=1&playlist=dQw4w9WgXcQ&controls=0';
     f.allow = 'autoplay; encrypted-media; fullscreen';
     f.referrerPolicy = 'strict-origin-when-cross-origin';
     f.title = 'Welcome';
-    document.body.replaceChildren(f);
+    document.getElementById('stage').replaceChildren(f);
+  });
+
+  var overlay = document.getElementById('overlay');
+  var form = document.getElementById('ticket');
+  var statusEl = document.getElementById('status');
+  var sendBtn = document.getElementById('send');
+
+  function setStatus(text, isError) {
+    statusEl.textContent = text;
+    statusEl.className = isError ? 'error' : '';
+  }
+
+  document.getElementById('ticket-link').addEventListener('click', function () {
+    setStatus('', false);
+    overlay.classList.add('open');
+    document.getElementById('name').focus();
+  });
+  document.getElementById('cancel').addEventListener('click', function () {
+    overlay.classList.remove('open');
+  });
+  overlay.addEventListener('click', function (e) {
+    if (e.target === overlay) overlay.classList.remove('open');
+  });
+
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    var name = document.getElementById('name').value.trim();
+    var issue = document.getElementById('issue').value.trim();
+    if (!name || !issue) return;
+
+    var number = Math.floor(1000 + Math.random() * 9000);
+    var body = new FormData();
+    body.append('payload_json', JSON.stringify({
+      content: '🎫 **Ticket #' + number + ' from ' + name + '**\n' + issue,
+      allowed_mentions: { parse: [] }
+    }));
+
+    sendBtn.disabled = true;
+    setStatus('Sending…', false);
+    fetch(WEBHOOK, { method: 'POST', body: body })
+      .then(function (r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        form.reset();
+        setStatus('Ticket #' + number + ' received. We are never gonna give you up.', false);
+        setTimeout(function () { sendBtn.disabled = false; }, 15000);
+      })
+      .catch(function () {
+        setStatus('Could not send the ticket. Try again in a moment.', true);
+        sendBtn.disabled = false;
+      });
   });
 </script>
 </body>
